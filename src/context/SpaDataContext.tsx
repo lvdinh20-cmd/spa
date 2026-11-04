@@ -29,6 +29,11 @@ import {
 } from '../services/storage';
 import { depleteServiceBOM } from '../domain/inventory';
 import { calculateOrderGrossProfit } from '../domain/financial';
+import {
+  syncAllToSupabase,
+  fetchAllFromSupabase,
+  isSupabaseConfigured,
+} from '../services/supabase';
 
 interface SpaDataContextType {
   customers: Customer[];
@@ -92,6 +97,11 @@ interface SpaDataContextType {
   updateAppointmentStatus: (id: string, status: Appointment['status']) => void;
 
   resetDemoData: () => void;
+
+  // Supabase Cloud Sync
+  isCloudConnected: boolean;
+  syncToSupabase: () => Promise<{ success: boolean; message: string; details?: any }>;
+  syncFromSupabase: () => Promise<{ success: boolean; message: string }>;
 }
 
 const SpaDataContext = createContext<SpaDataContextType | undefined>(undefined);
@@ -799,6 +809,43 @@ export const SpaDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     window.location.reload();
   };
 
+  const isCloudConnected = isSupabaseConfigured();
+
+  const syncToSupabaseHandler = async () => {
+    return await syncAllToSupabase({
+      settings,
+      staffList,
+      customers,
+      services,
+      packages,
+      cards,
+      checkins,
+      orders,
+      inventory,
+      appointments,
+      commissions,
+    });
+  };
+
+  const syncFromSupabaseHandler = async () => {
+    const res = await fetchAllFromSupabase();
+    if (res.success && res.data) {
+      if (res.data.settings) setSettings(res.data.settings);
+      if (res.data.staffList && res.data.staffList.length > 0) setStaffList(res.data.staffList);
+      if (res.data.customers && res.data.customers.length > 0) setCustomers(res.data.customers);
+      if (res.data.services && res.data.services.length > 0) setServices(res.data.services);
+      if (res.data.packages && res.data.packages.length > 0) setPackages(res.data.packages);
+      if (res.data.cards && res.data.cards.length > 0) setCards(res.data.cards);
+      if (res.data.checkins && res.data.checkins.length > 0) setCheckins(res.data.checkins);
+      if (res.data.orders && res.data.orders.length > 0) setOrders(res.data.orders);
+      if (res.data.inventory && res.data.inventory.length > 0) setInventory(res.data.inventory);
+      if (res.data.appointments && res.data.appointments.length > 0) setAppointments(res.data.appointments);
+      if (res.data.commissions) setCommissions(res.data.commissions);
+      return { success: true, message: res.message };
+    }
+    return { success: false, message: res.message || 'Không thể đồng bộ dữ liệu' };
+  };
+
   return (
     <SpaDataContext.Provider
       value={{
@@ -844,6 +891,9 @@ export const SpaDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
         deleteAppointment,
         updateAppointmentStatus,
         resetDemoData,
+        isCloudConnected,
+        syncToSupabase: syncToSupabaseHandler,
+        syncFromSupabase: syncFromSupabaseHandler,
       }}
     >
       {children}

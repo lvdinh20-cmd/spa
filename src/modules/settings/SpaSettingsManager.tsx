@@ -25,13 +25,45 @@ import {
   Palette,
   ShieldCheck,
   Award,
+  Database,
+  Cloud,
+  RefreshCw,
+  UploadCloud,
+  DownloadCloud,
+  ExternalLink,
+  Code,
+  AlertCircle,
+  Trash2,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import {
+  getSupabaseConfig,
+  saveSupabaseConfig,
+  clearSupabaseConfig,
+  testSupabaseConnection,
+} from '../../services/supabase';
+import { SUPABASE_SCHEMA_SQL } from '../../services/supabaseSchema';
 
 export const SpaSettingsManager: React.FC = () => {
-  const { settings, updateSettings } = useSpaData();
+  const {
+    settings,
+    updateSettings,
+    isCloudConnected,
+    syncToSupabase,
+    syncFromSupabase,
+  } = useSpaData();
 
-  const [activeTab, setActiveTab] = useState<'brand' | 'bank' | 'contact' | 'invoice'>('brand');
+  const [activeTab, setActiveTab] = useState<'brand' | 'bank' | 'contact' | 'invoice' | 'supabase'>('brand');
+
+  // Supabase states
+  const initSupabaseCfg = getSupabaseConfig();
+  const [supabaseUrl, setSupabaseUrl] = useState(initSupabaseCfg.url);
+  const [supabaseAnonKey, setSupabaseAnonKey] = useState(initSupabaseCfg.anonKey);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  const [copiedSql, setCopiedSql] = useState(false);
 
   // Form states
   const [spaName, setSpaName] = useState(settings.spaName);
@@ -204,6 +236,23 @@ export const SpaSettingsManager: React.FC = () => {
         >
           <Receipt className="w-4 h-4 text-purple-600" />
           <span>4. In Hóa Đơn & Tích Điểm</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('supabase')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+            activeTab === 'supabase'
+              ? 'bg-blue-50 text-blue-800 border border-blue-200 shadow-sm'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Database className="w-4 h-4 text-blue-600" />
+          <span>5. Đồng Bộ Supabase Cloud DB</span>
+          <span
+            className={`w-2 h-2 rounded-full ${
+              isCloudConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'
+            }`}
+          />
         </button>
       </div>
 
@@ -631,6 +680,301 @@ export const SpaSettingsManager: React.FC = () => {
                   Ví dụ: Với tỷ lệ {formatVND(pointsRate)} = 1 điểm, đơn hàng trị giá 2,000,000đ sẽ tự động tích lũy{' '}
                   <strong>{Math.floor(2000000 / (pointsRate || 20000))} điểm</strong> cho khách hàng.
                 </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: Supabase Cloud Database */}
+        {activeTab === 'supabase' && (
+          <div className="space-y-6">
+            {/* Status Card */}
+            <div className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
+                      isCloudConnected
+                        ? 'bg-emerald-50 text-emerald-600'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    <Database className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-slate-900 text-sm">
+                        Kết Nối Cơ Sở Dữ Liệu Supabase Cloud
+                      </h3>
+                      <span
+                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                          isCloudConnected
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-slate-50 text-slate-600 border-slate-200'
+                        }`}
+                      >
+                        {isCloudConnected ? '🟢 ĐÃ KẾT NỐI CLOUD' : '⚪ CHẾ ĐỘ CỤC BỘ (LOCAL)'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Đồng bộ dữ liệu khách hàng, hóa đơn, kho, dịch vụ và lịch hẹn theo thời gian thực giữa nhiều máy tính & điện thoại.
+                    </p>
+                  </div>
+                </div>
+
+                {isCloudConnected && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm('Bạn có chắc chắn muốn ngắt kết nối Supabase và quay lại bộ nhớ LocalStorage?')) {
+                        clearSupabaseConfig();
+                        setSupabaseUrl('');
+                        setSupabaseAnonKey('');
+                        setTestResult(null);
+                        alert('Đã ngắt kết nối Supabase!');
+                        window.location.reload();
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-bold transition-all border border-rose-200 cursor-pointer self-start sm:self-auto"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Ngắt Kết Nối</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Form Input URL and Key */}
+              <div className="grid grid-cols-1 gap-4 pt-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Supabase Project URL <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="url"
+                    value={supabaseUrl}
+                    onChange={(e) => setSupabaseUrl(e.target.value)}
+                    placeholder="https://your-project-id.supabase.co"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Lấy trong Supabase Dashboard $\rightarrow$ <strong>Project Settings</strong> $\rightarrow$ <strong>API</strong> $\rightarrow$ <strong>Project URL</strong>
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Supabase Project API Key (anon / public) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={supabaseAnonKey}
+                    onChange={(e) => setSupabaseAnonKey(e.target.value)}
+                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    className="w-full p-2.5 rounded-xl border border-slate-200 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Khóa công khai an toàn (anon public key) dùng cho ứng dụng web Single Page App.
+                  </p>
+                </div>
+
+                {/* Test Result Alert */}
+                {testResult && (
+                  <div
+                    className={`p-3.5 rounded-2xl border text-xs flex items-start gap-2.5 ${
+                      testResult.success
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                        : 'bg-rose-50 border-rose-200 text-rose-800'
+                    }`}
+                  >
+                    {testResult.success ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    )}
+                    <span className="leading-relaxed">{testResult.message}</span>
+                  </div>
+                )}
+
+                {/* Sync Status Banner */}
+                {syncStatus && (
+                  <div className="p-3.5 rounded-2xl border bg-blue-50 border-blue-200 text-blue-900 text-xs flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                    <span>{syncStatus}</span>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    disabled={isTesting || !supabaseUrl || !supabaseAnonKey}
+                    onClick={async () => {
+                      setIsTesting(true);
+                      setTestResult(null);
+                      saveSupabaseConfig(supabaseUrl, supabaseAnonKey);
+                      const res = await testSupabaseConnection(supabaseUrl, supabaseAnonKey);
+                      setIsTesting(false);
+                      setTestResult(res);
+                      if (res.success) {
+                        confetti({ particleCount: 50, spread: 60 });
+                      }
+                    }}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-xl font-bold text-xs shadow-sm transition-all cursor-pointer"
+                  >
+                    {isTesting ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Cloud className="w-4 h-4" />
+                    )}
+                    <span>{isTesting ? 'Đang Kiểm Tra Kết Nối...' : 'Lưu & Kiểm Tra Kết Nối'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isSyncing || !isCloudConnected}
+                    onClick={async () => {
+                      if (!confirm('Đẩy toàn bộ dữ liệu hiện tại (Khách hàng, Dịch vụ, Kho, Lịch hẹn, Đơn hàng) lên Supabase?')) {
+                        return;
+                      }
+                      setIsSyncing(true);
+                      setSyncStatus('Đang đẩy dữ liệu lên đám mây Supabase...');
+                      const res = await syncToSupabase();
+                      setIsSyncing(false);
+                      setSyncStatus(res.message);
+                      if (res.success) {
+                        confetti({ particleCount: 80, spread: 70 });
+                      }
+                    }}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl font-bold text-xs shadow-sm transition-all cursor-pointer"
+                  >
+                    {isSyncing ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <UploadCloud className="w-4 h-4" />
+                    )}
+                    <span>Đẩy Dữ Liệu Lên Supabase (Upload)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isSyncing || !isCloudConnected}
+                    onClick={async () => {
+                      if (!confirm('Tải toàn bộ dữ liệu từ Supabase về ghi đè dữ liệu trên thiết bị này?')) {
+                        return;
+                      }
+                      setIsSyncing(true);
+                      setSyncStatus('Đang tải dữ liệu từ Supabase về máy...');
+                      const res = await syncFromSupabase();
+                      setIsSyncing(false);
+                      setSyncStatus(res.message);
+                      if (res.success) {
+                        confetti({ particleCount: 60, spread: 60 });
+                      }
+                    }}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl font-bold text-xs shadow-sm transition-all cursor-pointer"
+                  >
+                    {isSyncing ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <DownloadCloud className="w-4 h-4" />
+                    )}
+                    <span>Tải Dữ Liệu Từ Supabase Về (Pull)</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* SQL Schema Generation Box */}
+            <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-3xl p-6 shadow-luxury space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-700/60 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center border border-blue-400/30">
+                    <Code className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-100">
+                      Mã Lệnh SQL Khởi Tạo CSDL Supabase (Schema & Dữ Liệu Mẫu)
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      Bao gồm 11 bảng dữ liệu, phân quyền RLS, chỉ mục tìm kiếm và tài khoản Admin Liin Spa
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(SUPABASE_SCHEMA_SQL);
+                      setCopiedSql(true);
+                      setTimeout(() => setCopiedSql(false), 2500);
+                    }}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-xs shadow-sm transition-all cursor-pointer"
+                  >
+                    {copiedSql ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    <span>{copiedSql ? 'Đã Sao Chép SQL!' : 'Sao Chép Mã SQL (1 Click)'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const blob = new Blob([SUPABASE_SCHEMA_SQL], { type: 'text/plain;charset=utf-8' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'liin_spa_supabase_schema.sql';
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl font-bold text-xs transition-all cursor-pointer"
+                  >
+                    <DownloadCloud className="w-4 h-4" />
+                    <span>Tải File .sql</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Step By Step Guide */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs pt-2">
+                <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80 space-y-1.5">
+                  <span className="inline-block w-5 h-5 rounded-full bg-blue-500 text-white font-bold text-center leading-5 text-[11px]">
+                    1
+                  </span>
+                  <h5 className="font-bold text-slate-200">Tạo Project Supabase</h5>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Truy cập <a href="https://supabase.com" target="_blank" rel="noreferrer" className="text-blue-400 underline">supabase.com</a>, đăng nhập và nhấn <strong>New project</strong>.
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80 space-y-1.5">
+                  <span className="inline-block w-5 h-5 rounded-full bg-blue-500 text-white font-bold text-center leading-5 text-[11px]">
+                    2
+                  </span>
+                  <h5 className="font-bold text-slate-200">Chạy Mã SQL</h5>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Ở thanh bên trái Supabase, chọn <strong>SQL Editor</strong> $\rightarrow$ Bấm nút <strong>"Sao Chép Mã SQL"</strong> ở trên $\rightarrow$ Dán vào và bấm <strong>Run</strong>.
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80 space-y-1.5">
+                  <span className="inline-block w-5 h-5 rounded-full bg-blue-500 text-white font-bold text-center leading-5 text-[11px]">
+                    3
+                  </span>
+                  <h5 className="font-bold text-slate-200">Lấy Khóa API</h5>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Vào <strong>Project Settings</strong> $\rightarrow$ <strong>API</strong> $\rightarrow$ Sao chép <strong>Project URL</strong> và <strong>anon key</strong>.
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80 space-y-1.5">
+                  <span className="inline-block w-5 h-5 rounded-full bg-blue-500 text-white font-bold text-center leading-5 text-[11px]">
+                    4
+                  </span>
+                  <h5 className="font-bold text-slate-200">Lưu & Đẩy Dữ Liệu</h5>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Dán vào 2 ô ở trên, bấm <strong>Lưu & Kiểm Tra</strong> rồi bấm <strong>Đẩy Dữ Liệu Lên Supabase</strong> là hoàn tất!
+                  </p>
+                </div>
               </div>
             </div>
           </div>
